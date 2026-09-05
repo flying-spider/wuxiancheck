@@ -1,0 +1,38 @@
+name: build-windows-exe
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt pyinstaller
+          python -m camoufox fetch
+
+      - name: Build exe
+        shell: pwsh
+        run: |
+          $browser = python -c "from camoufox.pkgman import camoufox_path; print(camoufox_path())"
+          pyinstaller --onefile --windowed --name vivo-wuxian `
+            --collect-all playwright `
+            --collect-all camoufox `
+            --collect-all browserforge `
+            --collect-all curl_cffi `
+            --add-data "$browser;camoufox" `
+            main.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vivo-wuxian-windows
+          path: dist/*.exe
