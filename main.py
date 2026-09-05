@@ -440,7 +440,7 @@ class Engine:
             self._log("error", f"无法导入 Camoufox：{e}")
             self._log("error", "请先运行 `python -m camoufox fetch` 下载浏览器内核。")
             return False
-        opts = {"headless": False, "humanize": True}
+        opts = {"headless": False, "humanize": True, "geoip": True}
         bundled = find_bundled_camoufox()
         if bundled:
             opts["executable_path"] = bundled

@@ -34,7 +34,8 @@ uv pip install -r requirements.txt
 
 - 质量检测请求走 curl_cffi（`impersonate="chrome"`），可在 `check_proxy_quality`
   里改成 `firefox` / `safari` 切换不同 TLS 指纹（JA3）。
-- 渲染层 Camoufox 默认 `humanize=True`，每次启动自动生成一套自洽的随机浏览器指纹。
+- 渲染层 Camoufox 默认 `humanize=True` + `geoip=True`：每次启动自动生成一套自洽的随机
+  浏览器指纹，并按代理 IP 自动对齐时区/语言/国家（需 `maxminddb`，首次会下载 GeoIP 库）。
 
 ## 打包 Windows exe
 
