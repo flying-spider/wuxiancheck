@@ -9,3 +9,6 @@ __pycache__/
 *.pyc
 build/
 *.spec
+
+# MITM 代理自动生成的证书（含 CA 私钥，勿提交）
+certs/

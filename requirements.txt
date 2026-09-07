@@ -2,3 +2,8 @@ camoufox>=0.5.5
 curl_cffi>=0.16.3
 platformdirs>=4.0.0
 maxminddb>=3.0.0
+
+# curl_cffi 随机指纹转发方案（main_curlffi.py / curlffi_proxy.py）
+playwright>=1.62.0
+cryptography>=50.0.0
+
