@@ -221,6 +221,7 @@
         可设置「最大自动切换数量」，达到上限即停止自动切换，重新勾选会自动清零计数。
       </div>
       <div class="actions">
+        <button id="clearCacheBtn" style="margin-right:auto">🗑 清除浏览器缓存</button>
         <button id="closeSettings">取消</button>
         <button id="saveSettings">保存</button>
       </div>
@@ -260,6 +261,7 @@
     const autoSwitchFields = document.getElementById('autoSwitchFields');
     const saveSettingsBtn = document.getElementById('saveSettings');
     const closeSettingsBtn = document.getElementById('closeSettings');
+    const clearCacheBtn = document.getElementById('clearCacheBtn');
 
     let poolStatus = {
       currentProxy: null,
@@ -414,6 +416,16 @@
     closeSettingsBtn.addEventListener('click', closeSettingsPanel);
     settingsMask.addEventListener('click', (e) => {
       if (e.target === settingsMask) closeSettingsPanel();
+    });
+    clearCacheBtn.addEventListener('click', async () => {
+      clearCacheBtn.disabled = true;
+      try {
+        await window.proxyApi.clearBrowserCache();
+      } catch (e) {
+        /* 结果由日志面板展示 */
+      } finally {
+        clearCacheBtn.disabled = false;
+      }
     });
     saveSettingsBtn.addEventListener('click', async () => {
       await window.proxyApi.saveSettings({

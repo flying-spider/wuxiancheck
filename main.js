@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
@@ -36,6 +36,14 @@ const CONTROL_PORT = 8898;
 
 // 忽略证书错误：让 Chromium 接受本地 MITM 代理签发的自签名证书
 app.commandLine.appendSwitch('ignore-certificate-errors');
+
+// 兜底：`ignore-certificate-errors` 开关对自定义 partition 的 WebContentsView
+// 经常不生效（见 electron#31596），导致所有 HTTPS 页面都因证书校验失败而打不开。
+// 这里用 certificate-error 事件显式放行，确保 MITM 自签名证书能被接受。
+app.on('certificate-error', (event, _webContents, _url, _error, _certificate, callback) => {
+  event.preventDefault();
+  callback(true);
+});
 
 // ---------------- 本地指纹代理（Python curl_cffi） ----------------
 let pythonProc = null;
@@ -137,6 +145,20 @@ async function setControlUpstream(upstream) {
   } catch (e) {
     log('warn', '设置上游代理失败：' + (e.message || e));
   }
+}
+
+// 等待本地指纹代理控制服务就绪：sidecar 从 spawn 到绑定端口需要约 1 秒，
+// 若在此之前就 loadURL，页面会因连不上 127.0.0.1:8899 而直接失败且无自动重试。
+async function waitForSidecarReady(timeoutMs = 8000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${CONTROL_PORT}/ping`, { signal: AbortSignal.timeout(500) });
+      if (res.ok) return true;
+    } catch (e) { /* 尚未就绪，继续等待 */ }
+    await sleep(200);
+  }
+  return false;
 }
 
 // ---------------- 设置 ----------------
@@ -748,6 +770,9 @@ function reloadBrowser() {
     const url = wc.getURL();
     if (url && url !== '' && url !== 'about:blank') {
       wc.reload();
+    } else {
+      // 页面尚未成功导航（如启动时 sidecar 未就绪导致首屏失败），重新打开主页
+      wc.loadURL(DEFAULT_URL).catch(() => {});
     }
   } catch (e) { /* 忽略 */ }
 }
@@ -837,7 +862,29 @@ async function applyBrowserProxy() {
   }
 }
 
+// 清空内嵌浏览器的所有缓存与站点数据（HTTP 缓存、认证缓存、DNS 缓存、Cookie、
+// localStorage、IndexedDB、Service Worker、Cache Storage 等）。切换代理前调用，
+// 让新 IP 以全新身份访问站点，避免残留旧 IP 的 Cookie/存储数据被站点关联或复用。
+async function clearBrowserCache() {
+  const ses = session.fromPartition(PARTITION);
+  try {
+    await ses.clearCache();
+    await ses.clearAuthCache();
+    await ses.clearHostResolverCache();
+    await ses.clearStorageData({
+      storages: ['cookies', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers', 'cachestorage', 'filesystem'],
+    });
+    log('info', '已清空浏览器缓存与站点数据');
+    return true;
+  } catch (e) {
+    log('warn', '清空浏览器缓存失败：' + (e.message || e));
+    return false;
+  }
+}
+
 async function applyProxy(item) {
+  // 切换代理前先清空浏览器缓存/站点数据，让新 IP 以全新身份访问
+  await clearBrowserCache();
   currentProxy = item.proxy;
   currentAuth = { user: item.user || '', pass: item.pass || '' };
   currentExpireAt = item.expireAt;
@@ -1069,6 +1116,8 @@ async function initProxyPool() {
       log('info', '已关闭自动换 IP：不自动补池，仅手动点击「刷新」时获取并应用代理');
       startMaintenance(); // 仅用于代理到期时回退直连，不自动补池/换 IP
     }
+    // 走本地 curl_cffi 中转时，等 sidecar 就绪再加载页面，避免启动竞态导致首屏连不上代理
+    if (settings.use_curlffi) await waitForSidecarReady();
     const wc0 = getBrowserWC();
     if (wc0) wc0.loadURL(DEFAULT_URL).catch(() => {});
     return;
@@ -1089,6 +1138,8 @@ async function initProxyPool() {
     await sleep(500);
   }
 
+  // 走本地 curl_cffi 中转时，等 sidecar 就绪再加载页面
+  if (settings.use_curlffi) await waitForSidecarReady();
   const wc0 = getBrowserWC();
   if (wc0) wc0.loadURL(DEFAULT_URL).catch(() => {});
 }
@@ -1128,6 +1179,19 @@ function createWindow() {
   mainWindow.on('resize', layoutBrowserView);
 
   const wc = browserView.webContents;
+
+  // 关键修复：接受本地 MITM 代理签发的自签名证书。Electron 的
+  // `ignore-certificate-errors` 开关对自定义 partition 的 WebContentsView
+  // 经常不生效，必须对 session 显式放行，否则所有 HTTPS 页面（无论走代理
+  // 还是"直连"回退）都会在 TLS 握手阶段被浏览器拒绝，sidecar 永远收不到
+  // 可转发的请求（日志里也就看不到任何 [proxy] 转发记录）。
+  try {
+    wc.session.setCertificateVerifyProc((_request, callback) => {
+      callback(0); // 0 = 校验通过，放行
+    });
+  } catch (e) {
+    log('warn', '设置证书校验放行失败：' + (e.message || e));
+  }
 
   // 页面请求走向由设置里的「curl_cffi 中转」开关决定
   applyBrowserProxy().catch((e) => log('warn', '应用浏览器代理模式失败：' + (e.message || e)));
@@ -1211,6 +1275,12 @@ ipcMain.handle('refresh-proxy', () => {
   const source = settings.auto_switch_ip ? 'pool' : 'fetch';
   swapProxy({ reload: true, source }).catch((e) => log('error', '刷新失败：' + (e && e.message ? e.message : e)));
   return { ok: true };
+});
+
+// 手动清空内嵌浏览器所有缓存与站点数据
+ipcMain.handle('clear-browser-cache', async () => {
+  const ok = await clearBrowserCache();
+  return { ok };
 });
 
 ipcMain.handle('get-settings', () => settings);

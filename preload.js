@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('proxyApi', {
   navigate: (url) => ipcRenderer.invoke('navigate', url),
   refreshProxy: () => ipcRenderer.invoke('refresh-proxy'),
+  clearBrowserCache: () => ipcRenderer.invoke('clear-browser-cache'),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (s) => ipcRenderer.invoke('save-settings', s),
   getCurrentUrl: () => ipcRenderer.invoke('get-current-url'),
