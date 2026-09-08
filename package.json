@@ -21,6 +21,18 @@
     "directories": {
       "output": "dist"
     },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "sidecar/curlffi_proxy.exe",
+        "to": "sidecar/curlffi_proxy.exe"
+      }
+    ],
     "win": {
       "target": [
         {

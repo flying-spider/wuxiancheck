@@ -225,17 +225,50 @@ class Forwarder:
         self.verbose = verbose
         self._lock = threading.Lock()
         self.proxies = None
+        self._imp = None            # 当前会话固定 TLS 指纹
+        self._risk = {"detected": False, "count": 0, "last": None}
         if upstream:
             self.proxies = {"http": upstream, "https": upstream}
+        self._refresh_imp()
+
+    def _refresh_imp(self):
+        """抽取当前会话的固定指纹。每次换上游（换 IP/身份）重新抽一次，
+        使同一会话内所有请求（含验证码 /api/a、/api/p1、/api/p2）指纹保持一致，
+        模拟真实浏览器，避免「逐请求指纹漂移」被顶象风控识别。"""
+        self._imp = random.choice(self.impersonates)
 
     def set_upstream(self, upstream):
-        """运行时切换上游代理（线程安全）。upstream: http://user:pass@ip:port 或 None。"""
+        """运行时切换上游代理（线程安全）。upstream: http://user:pass@ip:port 或 None。
+        换上游意味着换身份，因此同时更换 TLS 指纹。"""
         with self._lock:
             self.proxies = {"http": upstream, "https": upstream} if upstream else None
+            self._refresh_imp()
+
+    # ---- 风控检测 ----
+    def _maybe_detect_risk(self, method, url, content):
+        # getSliderUrl 是风控闸口：通过时返回长密文（约 1284 字节），
+        # 风控/失败时返回短密文（约 164 字节）。据此用 body 长度识别风控。
+        if method.upper() != "GET" or "getSliderUrl" not in url:
+            return
+        if content.startswith(b"enc:") and len(content) < 500:
+            with self._lock:
+                self._risk["detected"] = True
+                self._risk["count"] += 1
+                self._risk["last"] = time.time()
+            if self.verbose:
+                print(f"[proxy] ⚠ 风控：getSliderUrl 返回短响应（{len(content)}字节），建议换 IP 重试", flush=True)
+
+    def risk_status(self):
+        with self._lock:
+            return dict(self._risk)
+
+    def reset_risk(self):
+        with self._lock:
+            self._risk["detected"] = False
 
     def forward(self, method, url, headers, body):
-        imp = random.choice(self.impersonates)
         with self._lock:
+            imp = self._imp or random.choice(self.impersonates)
             proxies = self.proxies
 
         fwd = []
@@ -266,6 +299,7 @@ class Forwarder:
         ms = int((time.time() - t0) * 1000)
 
         content = r.content or b""
+        self._maybe_detect_risk(method, url, content)
         reason = getattr(r, "reason", None) or http.client.responses.get(r.status_code, "")
         head = f"HTTP/1.1 {r.status_code} {reason}\r\n"
         out_headers = []
@@ -468,6 +502,8 @@ class ControlServer:
             def do_GET(self):
                 if self.path == "/ping":
                     self._send_json({"ok": True, "proxies": fwd.proxies})
+                elif self.path == "/risk-status":
+                    self._send_json({"ok": True, "risk": fwd.risk_status()})
                 else:
                     self._send_json({"ok": False}, 404)
 
@@ -487,6 +523,9 @@ class ControlServer:
                         self._send_json({"ok": True, "proxies": fwd.proxies})
                     except Exception as e:
                         self._send_json({"ok": False, "error": str(e)}, 400)
+                elif self.path == "/risk-reset":
+                    fwd.reset_risk()
+                    self._send_json({"ok": True})
                 else:
                     self._send_json({"ok": False}, 404)
 

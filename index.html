@@ -61,7 +61,8 @@
     }
     #settingsMask.show { display: flex; }
     #settingsPanel {
-      width: 420px; max-width: 92vw; background: #fff;
+      width: 420px; max-width: 92vw; max-height: 92vh; overflow-y: auto;
+      background: #fff;
       border-radius: 10px; padding: 20px; box-shadow: 0 10px 40px rgba(0,0,0,.2);
     }
     #settingsPanel h2 { font-size: 17px; margin-bottom: 16px; }
@@ -73,6 +74,19 @@
       border: 1px solid #c8c8c8; border-radius: 6px; font-size: 14px; outline: none;
     }
     #settingsPanel input:focus { border-color: #0a7cff; }
+    #settingsPanel select {
+      width: 100%; height: 34px; margin-top: 5px; padding: 0 10px;
+      border: 1px solid #c8c8c8; border-radius: 6px; font-size: 14px; outline: none;
+      background: #fff;
+    }
+    #settingsPanel select:focus { border-color: #0a7cff; }
+    #settingsPanel .switch-row {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 14px; cursor: pointer; user-select: none;
+    }
+    #settingsPanel .switch-row input[type="checkbox"] {
+      width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: #0a7cff;
+    }
     #settingsPanel .row { display: flex; gap: 10px; }
     #settingsPanel .row label { flex: 1; }
     #settingsPanel .hint {
@@ -104,36 +118,107 @@
   <div id="settingsMask">
     <div id="settingsPanel">
       <h2>代理设置</h2>
-      <label>trade_no（业务编号）
-        <input id="setTradeNo" type="text" placeholder="例如 A461584673943" />
+      <label class="switch-row">
+        <input id="setDirect" type="checkbox" />
+        <span>直连模式（浏览器与 curl_cffi 均不走 91http 代理）</span>
       </label>
-      <label>secret（业务密钥）
-        <input id="setSecret" type="text" placeholder="例如 jg3p8xBYPpM7J6sy" />
+      <label class="switch-row">
+        <input id="setRiskProxyOnly" type="checkbox" />
+        <span>仅 getSliderUrl 走动态代理（其余请求直连）</span>
       </label>
-      <div class="row">
-        <label>代理账号（账密认证）
-          <input id="setProxyUser" type="text" placeholder="选填，白名单可留空" />
-        </label>
-        <label>代理密码
-          <input id="setProxyPass" type="password" placeholder="选填" />
+      <label class="switch-row">
+        <input id="setUseCurlffi" type="checkbox" />
+        <span>使用 curl_cffi 做请求中转（TLS 指纹伪装）</span>
+      </label>
+      <label class="switch-row">
+        <input id="setCaptchaDirect" type="checkbox" />
+        <span>验证码域名直连（captcha.vivo.com.cn 不走代理）</span>
+      </label>
+      <label class="switch-row">
+        <input id="setAutoSwitchIp" type="checkbox" />
+        <span>自动换 IP（到期前 5 秒 / 检测到风控时自动切换）</span>
+      </label>
+      <div id="autoSwitchFields" style="display:none">
+        <label>最大自动切换数量（0 = 不限）
+          <input id="setMaxAutoSwitch" type="number" min="0" max="100000" placeholder="例如 10" />
         </label>
       </div>
-      <div class="row">
-        <label>每次提取 IP 数量
-          <input id="setNum" type="number" min="1" max="200" />
+      <label>供应商
+        <select id="setProvider">
+          <option value="91http">91代理</option>
+          <option value="rox">rox代理</option>
+        </select>
+      </label>
+
+      <div id="fields91">
+        <label>提取链接（具体参数请在链接内自行配置）
+          <input id="setExtractUrl" type="text" placeholder="例如 http://api.91http.com/v1/get-ip?trade_no=…&num=5&format=text&sep=1&time=1" />
         </label>
-        <label>优质 IP 池大小 N
-          <input id="setN" type="number" min="1" max="200" />
+        <div class="row">
+          <label>代理账号（账密认证）
+            <input id="setProxyUser" type="text" placeholder="选填，白名单可留空" />
+          </label>
+          <label>代理密码
+            <input id="setProxyPass" type="password" placeholder="选填" />
+          </label>
+        </div>
+      </div>
+
+      <div id="fieldsRox" style="display:none">
+        <div class="row">
+          <label>主机（IP/域名）
+            <input id="setRoxHost" type="text" placeholder="例如 373faedd3307c0a4.abc.as.roxstar.cn" />
+          </label>
+          <label>端口
+            <input id="setRoxPort" type="text" placeholder="例如 4600" />
+          </label>
+        </div>
+        <label>账号（含 sessid，切换 IP 时随机化其后 8 位）
+          <input id="setRoxUsername" type="text" placeholder="user-flyingpig-region-hk-sessid-hkXXXXXXX-sesstime-10-keep-true" />
+        </label>
+        <label>密码
+          <input id="setRoxPassword" type="password" placeholder="例如 7a8d247be7858037f391d8d8ad2f723c" />
         </label>
       </div>
+
+      <label>优质 IP 池大小 N
+        <input id="setN" type="number" min="1" max="200" />
+      </label>
       <label>质量检测延迟阈值（毫秒）
         <input id="setMaxLatency" type="number" min="100" max="15000" placeholder="例如 2000" />
       </label>
+      <label>质量检测网址（留空则不检测域名，仅判定代理 TCP 可达）
+        <input id="setCheckUrl" type="text" placeholder="例如 https://www.baidu.com/（留空 = 不检测域名）" />
+      </label>
       <div class="hint">
-        后台会持续拉取并访问 https://userappeal.vivo.com.cn/#/index 检测 IP 质量；
-        仅当响应耗时低于延迟阈值且页面含「vivo账号申诉」才算优质 IP；
+        在「供应商」选择代理源：
+        · 91代理：填「提取链接」（返回 ip:port:时间 文本，链接需含 format=text&sep=1&time=1），
+          可选填代理账号/密码做账密认证；
+        · rox代理：填主机、端口、账号、密码，切换 IP 时随机化账号中 sessid 字段的后 8 位
+          （大小写+数字），IP 默认按 5 分钟寿命处理。
+        后台会持续拉取代理并用「质量检测网址」检测 IP 质量；网址留空时不检测域名，
+        仅判定代理 TCP 可达即入池。网址填 vivo 业务站（https://userappeal.vivo.com.cn/#/index）
+        时，还会额外探测验证码源站 captcha.vivo.com.cn 并校验页面含「vivo账号申诉」，
+        仅当响应耗时低于延迟阈值才算优质 IP；若 vivo 域名被代理出口屏蔽（CONNECT 403），
+        可改填一个可访问的网址（如 https://www.baidu.com/）来只检测隧道连通性；
         若代理返回 407（需要认证），请在「代理账号/密码」中填写 91http 的账密，
-        或用白名单验证；池满 N 个即暂停拉取，低于 N 自动补充；当前 IP 到期前 20 秒自动换新。
+        或用白名单验证；池满 N 个即暂停拉取，低于 N 自动补充；当前 IP 到期前 5 秒自动换新；
+        查询时若 getSliderUrl 返回风控（账号存在风险），会自动换 IP 并刷新页面重试；
+        「直连模式」开启后，浏览器与 curl_cffi 转发均不走 91http 代理，直接用本机 IP
+        访问（此时不会拉取代理池，也不会自动换 IP）；适合排查代理是否拖慢访问。
+        「仅 getSliderUrl 走动态代理」开启后，只有风控闸口请求 getSliderUrl
+        （/userappeal/v1/getSliderUrl）经本地 curl_cffi + 91http 动态代理转发，
+        其余请求（页面、静态资源、验证码图片）全部直连本机 IP；
+        风控自动换 IP 依然生效（检测 getSliderUrl 返回的短密文），并与「直连模式」互斥。
+        「使用 curl_cffi 中转」开启时浏览器请求经本地 MITM 代理做 TLS 指纹伪装，
+        关闭时浏览器直连上游代理（不伪装指纹），可对比验证码加载效果；
+        「验证码域名直连」开启后，captcha.vivo.com.cn（含 JS、接口与 p1/p2 图片）
+        绕过代理直接访问源站，可显著加快验证码弹出与图片加载，但页面与验证码会来自不同 IP，
+        极少数情况下顶象风控可能因 IP 不一致而拒绝，如遇失败请关闭该开关。
+        「自动换 IP」关闭后，到期与风控都不再自动切换，也不再自动补池，
+        只有手动点击「刷新」时才主动获取一个代理并应用；
+        开启后会自动补池，手动「刷新」改为直接从池中取（不主动拉取），
+        可设置「最大自动切换数量」，达到上限即停止自动切换，重新勾选会自动清零计数。
       </div>
       <div class="actions">
         <button id="closeSettings">取消</button>
@@ -153,13 +238,26 @@
     const zoomPctBtn = document.getElementById('zoomPct');
     const zoomInBtn = document.getElementById('zoomIn');
     const settingsMask = document.getElementById('settingsMask');
-    const setTradeNo = document.getElementById('setTradeNo');
-    const setSecret = document.getElementById('setSecret');
+    const setProvider = document.getElementById('setProvider');
+    const fields91 = document.getElementById('fields91');
+    const fieldsRox = document.getElementById('fieldsRox');
+    const setExtractUrl = document.getElementById('setExtractUrl');
     const setProxyUser = document.getElementById('setProxyUser');
     const setProxyPass = document.getElementById('setProxyPass');
-    const setNum = document.getElementById('setNum');
+    const setRoxHost = document.getElementById('setRoxHost');
+    const setRoxPort = document.getElementById('setRoxPort');
+    const setRoxUsername = document.getElementById('setRoxUsername');
+    const setRoxPassword = document.getElementById('setRoxPassword');
     const setN = document.getElementById('setN');
     const setMaxLatency = document.getElementById('setMaxLatency');
+    const setCheckUrl = document.getElementById('setCheckUrl');
+    const setDirect = document.getElementById('setDirect');
+    const setRiskProxyOnly = document.getElementById('setRiskProxyOnly');
+    const setUseCurlffi = document.getElementById('setUseCurlffi');
+    const setCaptchaDirect = document.getElementById('setCaptchaDirect');
+    const setAutoSwitchIp = document.getElementById('setAutoSwitchIp');
+    const setMaxAutoSwitch = document.getElementById('setMaxAutoSwitch');
+    const autoSwitchFields = document.getElementById('autoSwitchFields');
     const saveSettingsBtn = document.getElementById('saveSettings');
     const closeSettingsBtn = document.getElementById('closeSettings');
 
@@ -172,6 +270,13 @@
       swapping: false,
       lastError: null,
       configured: false,
+      useCurlffi: true,
+      captchaDirect: false,
+      direct: false,
+      riskProxyOnly: false,
+      autoSwitchIp: true,
+      maxAutoSwitch: 0,
+      autoSwitchCount: 0,
     };
 
     function normalizeUrl(raw) {
@@ -190,10 +295,16 @@
     function renderStatus() {
       const s = poolStatus;
       let text = '池 ' + s.poolSize + '/' + s.targetN;
+      if (s.direct) text += '　[直连模式]';
+      if (s.riskProxyOnly) text += '　[仅风控代理]';
+      if (s.useCurlffi === false) text += '　[直连]';
+      if (s.captchaDirect) text += '　[验证码直连]';
       if (s.currentProxy && s.currentExpireAt) {
         const remain = Math.max(0, Math.round((s.currentExpireAt - Date.now()) / 1000));
         text += '　代理 ' + s.currentProxy + '　剩余 ' + remain + 's';
       }
+      if (s.autoSwitchIp === false) text += '　[自动换IP关]';
+      else if (s.maxAutoSwitch > 0) text += '　自动换IP ' + s.autoSwitchCount + '/' + s.maxAutoSwitch;
       statusEl.textContent = text;
     }
 
@@ -258,15 +369,46 @@
       settingsMask.classList.remove('show');
       window.proxyApi.setSettingsOpen(false);
     }
+    // 「直连模式」与「仅风控代理」互斥：勾选一个自动取消另一个
+    setDirect.addEventListener('change', () => {
+      if (setDirect.checked) setRiskProxyOnly.checked = false;
+    });
+    setRiskProxyOnly.addEventListener('change', () => {
+      if (setRiskProxyOnly.checked) setDirect.checked = false;
+    });
+    // 「自动换 IP」勾选时显示最大切换数量输入框
+    function renderAutoSwitchFields() {
+      autoSwitchFields.style.display = setAutoSwitchIp.checked ? '' : 'none';
+    }
+    setAutoSwitchIp.addEventListener('change', renderAutoSwitchFields);
+    // 供应商切换时，显示对应的字段组
+    function renderProviderFields() {
+      const isRox = setProvider.value === 'rox';
+      fields91.style.display = isRox ? 'none' : '';
+      fieldsRox.style.display = isRox ? '' : 'none';
+    }
+    setProvider.addEventListener('change', renderProviderFields);
     settingsBtn.addEventListener('click', async () => {
       const s = await window.proxyApi.getSettings();
-      setTradeNo.value = s.trade_no || '';
-      setSecret.value = s.secret || '';
+      setProvider.value = s.provider === 'rox' ? 'rox' : '91http';
+      setExtractUrl.value = s.extract_url || '';
       setProxyUser.value = s.proxy_user || '';
       setProxyPass.value = s.proxy_pass || '';
-      setNum.value = s.num;
+      setRoxHost.value = s.rox_host || '';
+      setRoxPort.value = s.rox_port || '';
+      setRoxUsername.value = s.rox_username || '';
+      setRoxPassword.value = s.rox_password || '';
       setN.value = s.N;
       setMaxLatency.value = s.maxLatency;
+      setCheckUrl.value = s.check_url || '';
+      setDirect.checked = !!s.direct;
+      setRiskProxyOnly.checked = !!s.risk_proxy_only;
+      setUseCurlffi.checked = s.use_curlffi !== false;
+      setCaptchaDirect.checked = !!s.captcha_direct;
+      setAutoSwitchIp.checked = s.auto_switch_ip !== false;
+      setMaxAutoSwitch.value = s.max_auto_switch ?? 0;
+      renderAutoSwitchFields();
+      renderProviderFields();
       openSettingsPanel();
     });
     closeSettingsBtn.addEventListener('click', closeSettingsPanel);
@@ -275,13 +417,23 @@
     });
     saveSettingsBtn.addEventListener('click', async () => {
       await window.proxyApi.saveSettings({
-        trade_no: setTradeNo.value.trim(),
-        secret: setSecret.value.trim(),
+        provider: setProvider.value,
+        extract_url: setExtractUrl.value.trim(),
         proxy_user: setProxyUser.value.trim(),
         proxy_pass: setProxyPass.value,
-        num: parseInt(setNum.value, 10),
+        rox_host: setRoxHost.value.trim(),
+        rox_port: setRoxPort.value.trim(),
+        rox_username: setRoxUsername.value.trim(),
+        rox_password: setRoxPassword.value,
         N: parseInt(setN.value, 10),
         maxLatency: parseInt(setMaxLatency.value, 10),
+        check_url: setCheckUrl.value.trim(),
+        use_curlffi: setUseCurlffi.checked,
+        captcha_direct: setCaptchaDirect.checked,
+        direct: setDirect.checked,
+        risk_proxy_only: setRiskProxyOnly.checked,
+        auto_switch_ip: setAutoSwitchIp.checked,
+        max_auto_switch: parseInt(setMaxAutoSwitch.value, 10),
       });
       closeSettingsPanel();
     });

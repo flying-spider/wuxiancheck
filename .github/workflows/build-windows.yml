@@ -15,22 +15,31 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt pyinstaller
-          python -m camoufox fetch
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Build exe
+      # 第一步：把 Python 指纹代理 sidecar 打包成独立的 curlffi_proxy.exe
+      # （serve-only 模式只依赖 curl_cffi + cryptography，无需 playwright/camoufox）
+      - name: Build Python sidecar (curlffi_proxy.exe)
         shell: pwsh
         run: |
-          $browser = python -c "from camoufox.pkgman import camoufox_path; print(camoufox_path())"
-          pyinstaller --onefile --windowed --name vivo-wuxian `
-            --collect-all playwright `
-            --collect-all camoufox `
-            --collect-all browserforge `
+          pip install curl_cffi cryptography pyinstaller
+          pyinstaller --onefile --name curlffi_proxy `
+            --distpath sidecar `
             --collect-all curl_cffi `
-            --add-data "$browser;camoufox" `
-            main.py
+            curlffi_proxy.py
+
+      # 第二步：安装 Electron 依赖并用 electron-builder 打包（自动带上 sidecar）
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build Windows Electron app
+        shell: pwsh
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
+        run: npx electron-builder --win
 
       - uses: actions/upload-artifact@v4
         with:
