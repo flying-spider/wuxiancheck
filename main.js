@@ -39,6 +39,7 @@ app.commandLine.appendSwitch('ignore-certificate-errors');
 
 // ---------------- 本地指纹代理（Python curl_cffi） ----------------
 let pythonProc = null;
+let quitting = false; // 是否正在退出（退出时不自动重启 sidecar）
 
 // 解析本地指纹代理的启动命令：打包后（Windows）优先用打包进来的 curlffi_proxy.exe，
 // 无需本机 Python；开发环境走 .venv 的 python + 脚本。
@@ -67,10 +68,17 @@ function startPythonProxy() {
   if (script) args.unshift(script);
   log('info', `启动本地指纹代理：${exe} ${script || ''}`.trim());
   try {
+    // Windows 上强制 sidecar 以 UTF-8 输出，避免 GBK/UTF-8 混用导致日志乱码
+    const env = { ...process.env };
+    if (process.platform === 'win32') {
+      env.PYTHONIOENCODING = 'utf-8';
+      env.PYTHONUTF8 = '1';
+    }
     pythonProc = spawn(exe, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: app.getPath('userData'), // CA 证书生成到可写目录
       windowsHide: true,            // 隐藏打包后 sidecar 的控制台窗口
+      env,
     });
 
     // 把 Python 代理的 stdout/stderr 转发到日志面板（去掉重复的 [proxy] 前缀）
@@ -84,8 +92,14 @@ function startPythonProxy() {
     pythonProc.stderr.on('data', (d) => forwardLines(d, 'error'));
 
     pythonProc.on('exit', (code) => {
-      if (pythonProc) log('warn', `本地指纹代理已退出（code=${code}）`);
+      const dead = pythonProc;
       pythonProc = null;
+      if (dead) log('warn', `本地指纹代理已退出（code=${code}）`);
+      // 崩溃/意外退出时自动重启，避免打包后的 Windows 版因 sidecar 挂掉而所有页面打不开
+      if (!quitting) {
+        log('info', '3 秒后自动重启本地指纹代理…');
+        setTimeout(() => { if (!quitting && !pythonProc) startPythonProxy(); }, 3000);
+      }
     });
     pythonProc.on('error', (e) => {
       log('error', '本地指纹代理启动失败：' + (e.message || e));
@@ -1179,6 +1193,7 @@ app.on('window-all-closed', () => {
 
 // 退出时关闭本地指纹代理子进程
 app.on('before-quit', () => {
+  quitting = true;
   stopPythonProxy();
 });
 

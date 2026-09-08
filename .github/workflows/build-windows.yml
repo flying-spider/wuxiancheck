@@ -17,7 +17,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       # 第一步：把 Python 指纹代理 sidecar 打包成独立的 curlffi_proxy.exe
       # （serve-only 模式只依赖 curl_cffi + cryptography，无需 playwright/camoufox）
